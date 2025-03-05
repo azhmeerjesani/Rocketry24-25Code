@@ -1,31 +1,43 @@
 import machine
-import utime
+import time
 
-# Define PWM pin
-SERVO_PIN = 16  # GPIO16
-pwm = machine.PWM(machine.Pin(SERVO_PIN))
+# Create PWM on GP16 at 50Hz
+servo = machine.PWM(machine.Pin(16))
+servo.freq(50)
 
-# Set frequency to 50Hz (standard for servos)
-pwm.freq(50)
 
-def set_servo_duty(duty_cycle):
+def angle_to_duty(angle):
     """
-    Set the duty cycle for the servo.
-    - 2.5% duty (~500us) is full reverse
-    - 7.5% duty (~1500us) is stop (neutral)
-    - 12.5% duty (~2500us) is full forward
+    Convert angle (0 to 180 degrees) into a duty_u16 value.
+    0°   => ~500µs pulse
+    180° => ~2500µs pulse
+
+    At 50Hz (period=20ms), duty_u16=65535 represents the entire 20ms.
     """
-    duty = int(duty_cycle / 100 * 65535)  # Convert percentage to 16-bit value
-    pwm.duty_u16(duty)
+    # Pulse width in microseconds for this angle
+    pulse_us = 500 + int((2000 * angle) / 180)  # from 500us to 2500us
+    # Convert microseconds to a fraction of the 20ms period
+    duty_fraction = pulse_us / 20000
+    return int(duty_fraction * 65535)
 
-# Turn the servo continuously (adjust duty for desired speed)
-set_servo_duty(10)  # Adjust duty cycle between ~5-10% for forward rotation
 
-# Run the servo for 30 seconds
-utime.sleep(30)
+start_time = time.time()
 
-# Stop the servo (neutral position)
-set_servo_duty(7.5)
+# Sweep back and forth until 30 seconds have passed
+while (time.time() - start_time) < 30:
+    # Sweep from 0° to 180°
+    for angle in range(0, 181, 5):
+        servo.duty_u16(angle_to_duty(angle))
+        time.sleep(0.02)  # Delay between steps
 
-# Disable PWM to conserve power
-pwm.deinit()
+    # Sweep from 180° down to 0°
+    for angle in range(180, -1, -5):
+        servo.duty_u16(angle_to_duty(angle))
+        time.sleep(0.02)
+
+# After 30s, move servo to neutral position (90°) and pause briefly
+servo.duty_u16(angle_to_duty(90))
+time.sleep(1)
+
+# Disable PWM
+servo.deinit()
